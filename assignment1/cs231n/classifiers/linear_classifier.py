@@ -57,7 +57,11 @@ class LinearClassifier(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
+            batch_idx = np.random.choice(np.arange(num_train), size=batch_size,
+                        replace=True)
+            
+            X_batch = X[batch_idx, :]
+            y_batch = y[batch_idx]
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -72,8 +76,7 @@ class LinearClassifier(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
-
+            self.W += - grad * learning_rate
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
             if verbose and it % 100 == 0:
@@ -102,7 +105,10 @@ class LinearClassifier(object):
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # self.W is a D x C matrix 
+        # X.W is (N, D).(D, C) = (N, C) matrix of samples and class scores
+        scores = X.dot(self.W)
+        y_pred = scores.argmax(axis=1)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         return y_pred
