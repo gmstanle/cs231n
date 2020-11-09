@@ -37,29 +37,38 @@ def softmax_loss_naive(W, X, y, reg):
     num_train = X.shape[0]
     loss = 0.0
     for i in range(num_train):
-        scores_i = X[i].dot(W)
-        correct_class_score = scores_i[y[i]]
+
+        # calculate scores
+        f = X[i].dot(W)
+        # correction for numerical stability
+        f -= np.max(f)
+        
+        # q is our "estimated probability" in the cross-entropy equation
+        q = np.exp( f[y[i]] ) / np.sum( np.exp(f) )
+
+        # add loss of ith sample
+        loss += -np.log(q)
+
+        # calculate grad
         dW_Li  = np.zeros(W.shape)
-        denom = 0.0
         for j in range(num_classes):
-            denom += np.exp(scores_i[j])
-            dW_Li[:,j] = X[i]
-            dW_Li[:,y[i]] = dW_Li[:,y[i]] - X[i]
-        
-        # add the loss of the ith sample to the total loss
-        L_i = -np.log(correct_class_score / denom) 
-        loss += L_i
-        
-        dW += dW_Li 
+            q_j = np.exp( f[j] ) / np.sum( np.exp(f) ) 
+            if j != y[i]:
+                dW_Li[:,j] = X[i] * q_j
+            else:
+                dW_Li[:,j] = - X[i] * (1-q)
+
+        # add the sample gradient to the total
+        dW += dW_Li
 
     # Right now the loss is a sum over all training examples, but we want it
     # to be an average instead so we divide by num_train.
     loss /= num_train
-
-    # Add regularization to the loss.
+    dW /= num_train
+    
+    # Add regularization to the loss and grad.
     loss += reg * np.sum(W * W)
-
-    dW = dW * (1/num_train) + 2 * W
+    dW += reg * 2 * W
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -75,6 +84,7 @@ def softmax_loss_vectorized(W, X, y, reg):
     # Initialize the loss and gradient to zero.
     loss = 0.0
     dW = np.zeros_like(W)
+    num_train = X.shape[0]
 
     #############################################################################
     # TODO: Compute the softmax loss and its gradient using no explicit loops.  #
@@ -84,7 +94,24 @@ def softmax_loss_vectorized(W, X, y, reg):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    F = X.dot(W) # N x C matrix of all scores of all classes x samples 
+    # numerical staiblity correction
+    F_corr = (F.transpose() - np.max(F, axis=1)).transpose()
+    F_exp = np.exp(F_corr)
+
+    q = F_exp[np.arange(num_train), y] / np.sum(F_exp, axis=1)
+
+    loss = -np.log(np.sum(q) / num_train)
+    loss += reg * np.sum(W * W)
+
+
+    # Calculate grad
+    Q = (F_exp.transpose() / np.sum(F_exp, axis=1)).transpose()
+    Q[np.arange(num_train), y] = Q[np.arange(num_train), y] - 1
+    dW = X.transpose().dot(Q)
+
+    dW /= num_train
+    dW += reg * 2 * W
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
