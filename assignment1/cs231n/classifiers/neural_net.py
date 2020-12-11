@@ -80,8 +80,12 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # compute the first pass
+        h1 = np.dot(X, W1) + b1
+        h1[h1 < 0] = 0 # ReLU
+        scores = np.dot(h1, W2) + b2
 
+        
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
         # If the targets are not given then jump out, we're done
@@ -98,7 +102,14 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # softmax
+        # numerical staiblity correction
+        scores_exp = np.exp((scores.transpose() - np.max(scores, axis=1)).transpose())
+        q = scores_exp[np.arange(N), y] / np.sum(scores_exp, axis=1)
+
+        loss = -np.log(np.sum(q) / N)
+        loss += reg * (np.sum(W1 * W1) + np.sum(W2 * W2))
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
