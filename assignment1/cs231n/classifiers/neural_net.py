@@ -81,9 +81,10 @@ class TwoLayerNet(object):
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
         # compute the first pass
-        h1 = np.dot(X, W1) + b1
+        z1 = np.dot(X, W1) + b1 # z1 is (N, H)
+        h1 = z1.copy() # just for ease of tracking the backprop calculation
         h1[h1 < 0] = 0 # ReLU
-        scores = np.dot(h1, W2) + b2
+        scores = np.dot(h1, W2) + b2 # scores is (N, C)
 
         
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -121,6 +122,27 @@ class TwoLayerNet(object):
         # grads['W1'] should store the gradient on W1, and be a matrix of same size #
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+        # Calculate grad
+        # grad of scores
+        dS = (scores_exp.transpose() / np.sum(scores_exp, axis=1)).transpose()
+        dS[np.arange(N), y] = dS[np.arange(N), y] - 1
+
+         # grad of second-layer weights
+        grads['db2'] = dS.sum(axis=0)
+        grads['dW2'] = h1.T.dot(dS)
+        
+        # grad of input to second layer
+        dh1 = dS.dot(grads['dW2'].T)
+
+        # grad of activation function
+        z_step = (z1 > 0).astype(float)
+        dz1 = dh1 * z_step # el-wise multiplication
+
+        # grad of first-layer weights
+        grads['dW1'] = X.T.dot(dz1)
+        grads['db1'] = dz1.sum(axis=0)
+        
 
         pass
 
