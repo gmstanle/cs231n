@@ -108,9 +108,9 @@ class TwoLayerNet(object):
         scores_exp = np.exp((scores.transpose() - np.max(scores, axis=1)).transpose())
         q = scores_exp[np.arange(N), y] / np.sum(scores_exp, axis=1)
 
-        loss = -np.log(np.sum(q) / N)
-        loss += reg * (np.sum(W1 * W1) + np.sum(W2 * W2))
-
+        # compute loss
+        loss = np.sum(-np.log(q)) / N
+        loss += reg * (np.sum(W1 * W1) + np.sum(W2 * W2)) 
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -125,26 +125,26 @@ class TwoLayerNet(object):
 
         # Calculate grad
         # grad of scores
-        dS = (scores_exp.transpose() / np.sum(scores_exp, axis=1)).transpose()
+        dS = (scores_exp.transpose() / np.sum(scores_exp, axis=1)).transpose() 
         dS[np.arange(N), y] = dS[np.arange(N), y] - 1
+        dS /= N
 
          # grad of second-layer weights
-        grads['db2'] = dS.sum(axis=0)
-        grads['dW2'] = h1.T.dot(dS)
+        grads['b2'] = dS.sum(axis=0)
+        grads['W2'] = h1.T.dot(dS) + reg * 2 * W2
         
         # grad of input to second layer
-        dh1 = dS.dot(grads['dW2'].T)
+        dh1 = dS.dot(W2.T)
 
         # grad of activation function
         z_step = (z1 > 0).astype(float)
         dz1 = dh1 * z_step # el-wise multiplication
 
         # grad of first-layer weights
-        grads['dW1'] = X.T.dot(dz1)
-        grads['db1'] = dz1.sum(axis=0)
+        grads['W1'] = X.T.dot(dz1) + reg * 2 * W1
+        grads['b1'] = dz1.sum(axis=0)
         
 
-        pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -188,9 +188,11 @@ class TwoLayerNet(object):
             # them in X_batch and y_batch respectively.                             #
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+            batch_idx = np.random.choice(np.arange(num_train), size=batch_size,
+                                            replace=True)
 
-            pass
-
+            X_batch = X[batch_idx, :]
+            y_batch = y[batch_idx]
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
             # Compute loss and gradients using the current minibatch
@@ -205,8 +207,10 @@ class TwoLayerNet(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
-
+            self.params['W1'] += -grads['W1'] * learning_rate
+            self.params['b1'] += -grads['b1'] * learning_rate
+            self.params['W2'] += -grads['W2'] * learning_rate
+            self.params['b2'] += -grads['b2'] * learning_rate
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
             if verbose and it % 100 == 0:
@@ -250,9 +254,8 @@ class TwoLayerNet(object):
         # TODO: Implement this function; it should be VERY simple!                #
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
-
+        scores = self.loss(X) # loss just returns scores if y=None
+        y_pred = scores.argmax(axis=1)
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
         return y_pred
