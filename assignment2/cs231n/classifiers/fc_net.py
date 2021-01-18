@@ -54,7 +54,22 @@ class TwoLayerNet(object):
         # weights and biases using the keys 'W2' and 'b2'.                         #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        # h1 = XW1 + b1
+        # h1 has dim (N, hidden_dim)
+        # X has dim (N, input_dim)
+        # W1 has dim (input_dim, hidden_dim)
+        # b1 has dim (hidden_dim)
+        
+        self.params['W1'] = np.random.randn(input_dim, hidden_dim) * weight_scale
+        self.params['b1'] = np.zeros(hidden_dim)
 
+        # scores = h1W2 + b2
+        # h1 (N, hidden_dim)
+        # scores (N, num_classes)
+        # W2 (hidden_dim, num_classes)
+        # b2 (num_classes)
+        self.params['W2'] = np.random.randn(hidden_dim, num_classes) * weight_scale
+        self.params['b2'] = np.zeros(num_classes)
         
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -87,8 +102,9 @@ class TwoLayerNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
-
+        h1, cache1 = affine_relu_forward(X, self.params['W1'], self.params['b1'])
+        scores, cache2 = affine_forward(h1, self.params['W2'], self.params['b2'])
+        
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -111,7 +127,20 @@ class TwoLayerNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        loss, dS = softmax_loss(scores, y)
+        loss += 0.5*self.reg * (np.sum(self.params['W2'] * self.params['W2']) +
+                np.sum(self.params['W1'] * self.params['W1']))
+        
+        # compute the backprop of the last affine step, producing the gradients
+        # wrt h1, W2, and b2. 
+        # Then add the regularization loss
+        dh1, grads['W2'], grads['b2'] = affine_backward(dS, cache2)
+        grads['W2'] += self.reg * self.params['W2']
+        
+        # compute the backprop of the middle layer affine + reLU
+        dX, grads['W1'], grads['b1'] = affine_relu_backward(dh1, cache1)
+        grads['W1'] += self.reg * self.params['W1']
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -190,9 +219,23 @@ class FullyConnectedNet(object):
         # parameters should be initialized to zeros.                               #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        for i in np.arange(self.num_layers):
+            # first layer has dim (D, H)
+            if i==0: 
+                self.params['W' + str(i+1)] = np.random.randn(input_dim, hidden_dims[i]) * weight_scale
+                self.params['b' + str(i+1)] = np.zeros(hidden_dims[i]) 
+            
+            # final layer has dim (H, C)
+            elif i==(self.num_layers - 1): 
+                self.params['W' + str(i+1)] = np.random.randn(hidden_dims[i-1], num_classes) * weight_scale
+                self.params['b' + str(i+1)] = np.zeros(num_classes)
 
-        pass
+            # middle layers have dim (H_n, H_m)
+            else:
+                self.params['W' + str(i+1)] = np.random.randn(hidden_dims[i-1], hidden_dims[i]) * weight_scale
+                self.params['b' + str(i+1)] = np.zeros(hidden_dims[i])
 
+        
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -252,8 +295,36 @@ class FullyConnectedNet(object):
         # layer, etc.                                                              #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        caches = {}
+        hlist = {}
 
-        pass
+
+        for i in np.arange(self.num_layers):
+            # for the first fwd pass, take the affine+relu of X and the first weights + biases, 
+            # store output in the list of activations hlist
+            if i==0:
+                h, caches['c' + str(i+1)] = affine_relu_forward(X, 
+                                                                self.params['W1'], 
+                                                                self.params['b1'])
+                # TODO
+                if self.normalization=='batchnorm':
+                    h = batchnorm(h
+
+            # for the final fwd pass, just compute the affine transform w/o relu and store the activations as scores
+            elif i==(self.num_layers - 1):
+                scores, caches['c' + str(i+1)]= affine_forward(h,
+                                                self.params['W' + str(i+1)], 
+                                                self.params['b' + str(i+1)])
+
+            # For middle passes, use the previous activations as input and store 
+            # the output in the next activation list
+            # The activation mtx h only is used for the subsequent step and 
+            # does not need to be saved
+            else:
+                h, caches['c' + str(i+1)]= affine_relu_forward(h,
+                                                            self.params['W' + str(i+1)], 
+                                                            self.params['b' + str(i+1)])
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -280,8 +351,25 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # first compute loss and softmax gradient
+        loss, dS = softmax_loss(scores, y)
 
+        for i in reversed(np.arange(self.num_layers)):
+
+            # The first backprop uses the softmax gradient as input
+            # The final layer is only affine, no relu
+            if i==(self.num_layers - 1):
+                dh, grads['W' + str(i+1)], grads['b' + str(i+1)] = affine_backward(dS, caches['c' + str(i+1)])
+                
+
+            # For middle passes, use the previous activations as input and store 
+            # the output in the next activation list
+            # Since the activation derivative is only used in the subsequent backprop
+            # and nowhere else, we don't need to keep it beyond that
+            else:
+                dh, grads['W' + str(i+1)], grads['b' + str(i+1)] = affine_relu_backward(dh, caches['c' + str(i+1)])
+
+        
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
         #                             END OF YOUR CODE                             #
