@@ -5,6 +5,26 @@ import numpy as np
 from ..layers import *
 from ..layer_utils import *
 
+def affine_batchnorm_relu_forward(x, w, b, gamma, beta, bn_param):
+    """
+    Forward pass for affine-batchnorm-relu convenience layer
+    """
+    a, fc_cache = affine_forward(x, w, b)
+    bn, bn_cache = batchnorm_forward(a, gamma, beta, bn_param)
+    out, relu_cache = relu_forward(bn)
+    cache = (fc_cache, bn_cache, relu_cache)
+    return out, cache
+
+def affine_batchnorm_relu_backward(dout, cache):
+    """
+    Backward pass for the affine-batchnorm-relu convenience layer
+    """
+    fc_cache, bn_cache, relu_cache = cache
+    da = relu_backward(dout, relu_cache)
+    dx_bn, dgamma, dbeta = batchnorm_backward_alt(da, bn_cache)
+    dx, dw, db = affine_backward(dx_bn, fc_cache)
+    return dx, dw, db, dgamma, dbeta
+
 
 class TwoLayerNet(object):
     """
@@ -224,16 +244,30 @@ class FullyConnectedNet(object):
             if i==0: 
                 self.params['W' + str(i+1)] = np.random.randn(input_dim, hidden_dims[i]) * weight_scale
                 self.params['b' + str(i+1)] = np.zeros(hidden_dims[i]) 
+                
+                # gamma and beta have the same dimension as the affine bias 
+                if self.normalization=='batchnorm':
+                    self.params['gamma1'] = np.ones(hidden_dims[i])
+                    self.params['beta1'] = np.zeros(hidden_dims[i])
+
             
             # final layer has dim (H, C)
             elif i==(self.num_layers - 1): 
                 self.params['W' + str(i+1)] = np.random.randn(hidden_dims[i-1], num_classes) * weight_scale
                 self.params['b' + str(i+1)] = np.zeros(num_classes)
 
+                # note: there is no batchnorm params for final layer
+
+
             # middle layers have dim (H_n, H_m)
             else:
                 self.params['W' + str(i+1)] = np.random.randn(hidden_dims[i-1], hidden_dims[i]) * weight_scale
                 self.params['b' + str(i+1)] = np.zeros(hidden_dims[i])
+
+                if self.normalization=='batchnorm':
+                    self.params['gamma' + str(i+1)] = np.ones(hidden_dims[i])
+                    self.params['beta' + str(i+1)] = np.zeros(hidden_dims[i])
+
 
         
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -260,12 +294,13 @@ class FullyConnectedNet(object):
             self.bn_params = [{"mode": "train"} for i in range(self.num_layers - 1)]
         if self.normalization == "layernorm":
             self.bn_params = [{} for i in range(self.num_layers - 1)]
+            # don't include the last layer because no batchnorm on last layer
 
         # Cast all parameters to the correct datatype
         for k, v in self.params.items():
             self.params[k] = v.astype(dtype)
 
-    def loss(self, X, y=None):
+    def loss(self, X, y=None, verbose=False):
         """
         Compute loss and gradient for the fully-connected net.
 
@@ -296,34 +331,53 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         caches = {}
-        hlist = {}
-
 
         for i in np.arange(self.num_layers):
             # for the first fwd pass, take the affine+relu of X and the first weights + biases, 
             # store output in the list of activations hlist
             if i==0:
-                h, caches['c' + str(i+1)] = affine_relu_forward(X, 
+                
+                if self.normalization=='batchnorm':
+                    h, caches['c' + str(i+1)] = \
+                        affine_batchnorm_relu_forward(X, 
+                                                      self.params['W1'],
+                                                      self.params['b1'],
+                                                      self.params['gamma1'],
+                                                      self.params['beta1'],
+                                                      self.bn_params[i])
+
+                else:
+                    h, caches['c' + str(i+1)] = affine_relu_forward(X, 
                                                                 self.params['W1'], 
                                                                 self.params['b1'])
-                # TODO
-                if self.normalization=='batchnorm':
-                    h = batchnorm(h
 
-            # for the final fwd pass, just compute the affine transform w/o relu and store the activations as scores
+            # for the final fwd pass, just compute the affine transform w/o relu
+            # or batchnorm and store the activations as scores
             elif i==(self.num_layers - 1):
                 scores, caches['c' + str(i+1)]= affine_forward(h,
                                                 self.params['W' + str(i+1)], 
                                                 self.params['b' + str(i+1)])
 
+                
             # For middle passes, use the previous activations as input and store 
             # the output in the next activation list
             # The activation mtx h only is used for the subsequent step and 
             # does not need to be saved
             else:
-                h, caches['c' + str(i+1)]= affine_relu_forward(h,
+                
+                if self.normalization=='batchnorm':
+                    h, caches['c' + str(i+1)] = \
+                        affine_batchnorm_relu_forward(h, 
+                                                      self.params['W' + str(i+1)],
+                                                      self.params['b' + str(i+1)],
+                                                      self.params['gamma'+ str(i+1)],
+                                                      self.params['beta' + str(i+1)],
+                                                      self.bn_params[i])
+                else:
+                    h, caches['c' + str(i+1)]= affine_relu_forward(h,
                                                             self.params['W' + str(i+1)], 
                                                             self.params['b' + str(i+1)])
+
 
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -357,17 +411,31 @@ class FullyConnectedNet(object):
         for i in reversed(np.arange(self.num_layers)):
 
             # The first backprop uses the softmax gradient as input
-            # The final layer is only affine, no relu
+            # The final layer is only affine, no relu or batchnorm
             if i==(self.num_layers - 1):
-                dh, grads['W' + str(i+1)], grads['b' + str(i+1)] = affine_backward(dS, caches['c' + str(i+1)])
-                
+                if verbose:
+                    print('calculating grad of W' + str(i+1))
+                dh, grads['W' + str(i+1)], grads['b' + str(i+1)] = \
+                    affine_backward(dS, caches['c' + str(i+1)])
 
             # For middle passes, use the previous activations as input and store 
             # the output in the next activation list
             # Since the activation derivative is only used in the subsequent backprop
             # and nowhere else, we don't need to keep it beyond that
             else:
-                dh, grads['W' + str(i+1)], grads['b' + str(i+1)] = affine_relu_backward(dh, caches['c' + str(i+1)])
+                if(self.normalization=='batchnorm'):
+                    # the model.bn_params[0] is copied in the caches['c1']
+                    if verbose:
+                        print('calculating grad of W' + str(i+1))
+                    dh, \
+                    grads['W' + str(i+1)], \
+                    grads['b' + str(i+1)], \
+                    grads['gamma' + str(i+1)], \
+                    grads['beta' + str(i+1)] = \
+                        affine_batchnorm_relu_backward(dh, caches['c' + str(i+1)])
+                else:
+                    dh, grads['W' + str(i+1)], grads['b' + str(i+1)] = \
+                        affine_relu_backward(dh, caches['c' + str(i+1)])
 
         
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****

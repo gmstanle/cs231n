@@ -174,7 +174,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     eps = bn_param.get("eps", 1e-5)
     momentum = bn_param.get("momentum", 0.9)
 
-    N, D = x.shape
+    _, D = x.shape
     running_mean = bn_param.get("running_mean", np.zeros(D, dtype=x.dtype))
     running_var = bn_param.get("running_var", np.zeros(D, dtype=x.dtype))
 
@@ -275,9 +275,8 @@ def batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     eps = cache['bn_param'].get("eps", 1e-5)
-    momentum = cache['bn_param'].get("momentum", 0.9)
     std_x = np.sqrt(cache['curr_var']+ eps)
-    N, D = dout.shape
+    N, _ = dout.shape
 
     # x_bn is the scaled x (x - mean)/var
     dgamma = (cache['x_bn'] * dout).sum(axis=0)
@@ -322,7 +321,7 @@ def batchnorm_backward_alt(dout, cache):
     eps = cache['bn_param'].get("eps", 1e-5)
     std_x = np.sqrt(cache['curr_var']+ eps)
     gamma = cache['gamma']
-    N, D  = dout.shape
+    N, _  = dout.shape
     x_bn  = cache['x_bn']
     x     = cache['x']
     mu    = cache['curr_mean']
