@@ -377,7 +377,20 @@ def layernorm_forward(x, gamma, beta, ln_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    cache = {}
+    curr_mean = x.mean(axis=1)
+    curr_var  = x.var(axis=1)
+    x_ln = ((x.T - curr_mean) / (np.sqrt(curr_var + eps))).T
+    out = gamma * x_ln + beta
+
+
+    cache['gamma'] = gamma
+    cache['beta']  = beta
+    cache['x_ln']  = x_ln
+    cache['ln_param'] = ln_param
+    cache['curr_mean'] = curr_mean
+    cache['curr_var'] = curr_var
+    cache['x'] = x
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -412,7 +425,32 @@ def layernorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # eps = cache['ln_param'].get("eps", 1e-5)
+    # std_x = np.sqrt(cache['curr_var']+ eps)
+    # N, _ = dout.shape
+
+
+    eps = cache['ln_param'].get("eps", 1e-5)
+    std_x = np.sqrt(cache['curr_var']+ eps)
+    N, D = dout.shape
+    x_ln = cache['x_ln']
+    gamma = cache['gamma']
+    lvar = cache['curr_var']
+    lmean = cache['curr_mean']
+    x = cache['x']
+
+    # x_bn is the scaled x (x - mean)/var
+    dgamma = (x_ln * dout).sum(axis=0)
+    dbeta  = dout.sum(axis=0)
+
+    dx_ln  = gamma * dout
+    dvar   = ((dx_ln * x_ln).T / (lvar + eps)).sum(axis=0) * (-1/2)
+    dmean  = -((dx_ln.T / std_x).sum(axis=0) + 
+             dvar * (2/D) * (x.T - lmean).sum(axis=0)).T
+    dx_1   = (dx_ln.T / std_x).T
+    dx_2 = (dvar * (2/D) * (x.T - lmean)).T
+    dx_3 =  (1/D) * dmean
+    dx = ((dx_1 + dx_2).T + dx_3).T
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
