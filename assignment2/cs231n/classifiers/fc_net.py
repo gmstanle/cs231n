@@ -5,6 +5,29 @@ import numpy as np
 from ..layers import *
 from ..layer_utils import *
 
+def affine_relu_dropout_forward(x, w, b, dropout_param):
+    """
+    Forward pass for affine-relu-dropout layer
+    """
+    a, fc_cache = affine_forward(x, w, b)
+    r, relu_cache = relu_forward(a)
+    out, do_cache = dropout_forward(r, dropout_param)
+    cache = (fc_cache, relu_cache, do_cache)
+
+    return out, cache
+
+def affine_relu_dropout_backward(dout, cache):
+    """
+    Backward pass for the affine-relu-dropout convenience layer
+    """
+    fc_cache, relu_cache, do_cache = cache
+    ddo = dropout_backward(dout, do_cache)
+    da = relu_backward(ddo, relu_cache)
+    dx, dw, db = affine_backward(da, fc_cache)
+
+    return dx, dw, db
+
+
 def affine_batchnorm_relu_forward(x, w, b, gamma, beta, bn_param):
     """
     Forward pass for affine-batchnorm-relu convenience layer
@@ -333,27 +356,41 @@ class FullyConnectedNet(object):
         caches = {}
 
         for i in np.arange(self.num_layers):
-            # for the first fwd pass, take the affine+relu of X and the first weights + biases, 
-            # store output in the list of activations hlist
+            if verbose:
+                print('Calculating forward pass ' + str(i))
             if i==0:
-                
-                if self.normalization=='batchnorm':
-                    h, caches['c' + str(i+1)] = \
-                        affine_batchnorm_relu_forward(X, 
-                                                      self.params['W1'],
-                                                      self.params['b1'],
-                                                      self.params['gamma1'],
-                                                      self.params['beta1'],
-                                                      self.bn_params[i])
 
-                else:
-                    h, caches['c' + str(i+1)] = affine_relu_forward(X, 
-                                                                self.params['W1'], 
-                                                                self.params['b1'])
+                if self.use_dropout:
+                    h, caches['c' + str(i+1)] = \
+                        affine_relu_dropout_forward(X, 
+                                                    self.params['W1'],
+                                                    self.params['b1'],
+                                                    self.dropout_param)
+                else:                                  
+                    if self.normalization=='batchnorm':
+                        h, caches['c' + str(i+1)] = \
+                            affine_batchnorm_relu_forward(X, 
+                                                        self.params['W1'],
+                                                        self.params['b1'],
+                                                        self.params['gamma1'],
+                                                        self.params['beta1'],
+                                                        self.bn_params[i])
+                    else:
+                        # for the first fwd pass, take the affine+relu of X and the first weights + biases, 
+                        # store output in the list of activations hlist
+                        h, caches['c' + str(i+1)] = affine_relu_forward(X, 
+                                                                    self.params['W1'], 
+                                                                    self.params['b1'])
+
+
+
 
             # for the final fwd pass, just compute the affine transform w/o relu
             # or batchnorm and store the activations as scores
             elif i==(self.num_layers - 1):
+                if verbose:
+                    print(h.shape)
+
                 scores, caches['c' + str(i+1)]= affine_forward(h,
                                                 self.params['W' + str(i+1)], 
                                                 self.params['b' + str(i+1)])
@@ -364,19 +401,27 @@ class FullyConnectedNet(object):
             # The activation mtx h only is used for the subsequent step and 
             # does not need to be saved
             else:
-                
-                if self.normalization=='batchnorm':
+                if verbose:
+                    print(h.shape)
+                if self.use_dropout:
                     h, caches['c' + str(i+1)] = \
-                        affine_batchnorm_relu_forward(h, 
-                                                      self.params['W' + str(i+1)],
-                                                      self.params['b' + str(i+1)],
-                                                      self.params['gamma'+ str(i+1)],
-                                                      self.params['beta' + str(i+1)],
-                                                      self.bn_params[i])
+                        affine_relu_dropout_forward(h, 
+                                                    self.params['W' + str(i+1)],
+                                                    self.params['b' + str(i+1)],
+                                                    self.dropout_param)
                 else:
-                    h, caches['c' + str(i+1)]= affine_relu_forward(h,
-                                                            self.params['W' + str(i+1)], 
-                                                            self.params['b' + str(i+1)])
+                    if self.normalization=='batchnorm':
+                        h, caches['c' + str(i+1)] = \
+                            affine_batchnorm_relu_forward(h, 
+                                                        self.params['W' + str(i+1)],
+                                                        self.params['b' + str(i+1)],
+                                                        self.params['gamma'+ str(i+1)],
+                                                        self.params['beta' + str(i+1)],
+                                                        self.bn_params[i])
+                    else:
+                        h, caches['c' + str(i+1)]= affine_relu_forward(h,
+                                                                self.params['W' + str(i+1)], 
+                                                                self.params['b' + str(i+1)])
 
 
 
@@ -423,19 +468,24 @@ class FullyConnectedNet(object):
             # Since the activation derivative is only used in the subsequent backprop
             # and nowhere else, we don't need to keep it beyond that
             else:
-                if(self.normalization=='batchnorm'):
-                    # the model.bn_params[0] is copied in the caches['c1']
-                    if verbose:
-                        print('calculating grad of W' + str(i+1))
-                    dh, \
-                    grads['W' + str(i+1)], \
-                    grads['b' + str(i+1)], \
-                    grads['gamma' + str(i+1)], \
-                    grads['beta' + str(i+1)] = \
-                        affine_batchnorm_relu_backward(dh, caches['c' + str(i+1)])
-                else:
+                if verbose:
+                    print('calculating grad of W' + str(i+1))
+                if self.use_dropout:
                     dh, grads['W' + str(i+1)], grads['b' + str(i+1)] = \
-                        affine_relu_backward(dh, caches['c' + str(i+1)])
+                        affine_relu_dropout_backward(dh, caches['c' + str(i+1)])
+
+                else:
+                    if(self.normalization=='batchnorm'):
+                        # the model.bn_params[0] is copied in the caches['c1']
+                        dh, \
+                        grads['W' + str(i+1)], \
+                        grads['b' + str(i+1)], \
+                        grads['gamma' + str(i+1)], \
+                        grads['beta' + str(i+1)] = \
+                            affine_batchnorm_relu_backward(dh, caches['c' + str(i+1)])
+                    else:
+                        dh, grads['W' + str(i+1)], grads['b' + str(i+1)] = \
+                            affine_relu_backward(dh, caches['c' + str(i+1)])
 
         
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
