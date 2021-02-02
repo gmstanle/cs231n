@@ -1,5 +1,6 @@
 from builtins import range
 import numpy as np
+from numpy.core.fromnumeric import argmax
 
 
 
@@ -587,8 +588,35 @@ def conv_forward_naive(x, w, b, conv_param):
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    pad = conv_param['pad']
+    S = conv_param['stride']
+    
+    N, C, H, W = x.shape # # samples, input depth, height, and width
+    F, _, HH, WW = w.shape # filter depth, height, width
 
-    pass
+    # Check dimensions
+    assert (W + 2 * pad - WW) % S == 0, "width does not work"
+    assert (H + 2 * pad - HH) % S == 0, "height does not work"
+
+    H_out = int(1 + (H + 2 * pad - HH) / S) # output height
+    W_out = int(1 + (W + 2 * pad - WW) / S) # output width
+    out = np.zeros((N, F, int(H_out), int(W_out)))
+ 
+    #default pad value is 0
+    x_pad = np.pad(x, pad_width=((0,0), (0,0), (pad, pad), (pad, pad)), 
+                   mode='constant') 
+
+    # x: Input data of shape (N, C, H, W)
+    # w: Filter weights of shape (F, C, HH, WW)
+    # out: Output data, of shape (N, F, H_out, W_out)
+    # Calculate each filter individually 
+    # print('N = %s, C = %s, F = %s, HH = %s, WW = %s' % (N, C, F, HH, WW))
+    for n in range(N):
+      for f in range(F):
+        for i in range(H_out):
+          for j in range(W_out):
+            out[n, f, i, j] = \
+              np.sum(x_pad[n, :, S*i:(S*i + HH), S*j:(S*j + WW)] * w[f, :, :, :]) + b[f]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -616,8 +644,60 @@ def conv_backward_naive(dout, cache):
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    
+    # extract variables from cache
+    x, w, b, conv_param = cache
+    pad = conv_param['pad']
+    S = conv_param['stride']
 
-    pass
+    # x: Input data of shape (N, C, H, W)
+    # w: Filter weights of shape (F, C, HH, WW)
+    # dout: incoming derivative shape (N, F, H_out, W_out)
+    N, C, H, W = x.shape 
+    F, _, HH, WW = w.shape
+    _, _, H_out, W_out = dout.shape 
+    
+    x_pad = np.pad(x, pad_width=((0,0), (0,0), (pad, pad), (pad, pad)), 
+                   mode='constant') 
+
+    dx = np.zeros(x.shape)
+    dw = np.zeros(w.shape)
+    db = np.zeros(b.shape)
+
+    # Compute dw 
+    for f in range(F):
+      for c in range(C):
+        for h in range(HH):
+          for v in range(WW):
+            for n in range(N):
+              for i in range(H_out):
+                for j in range(W_out):
+                  x_slice = x_pad[n, :, S*i:(S*i + HH), S*j:(S*j + WW)]
+                  dw[f, c, h, v] += x_slice[c, h, v] * dout[n, f, i, j]
+
+    
+    # compute dx
+    # start with dx_pad
+    H_pad = H + 2*pad
+    W_pad = W + 2*pad
+    dx_pad = np.zeros(x_pad.shape)
+    for n in range(N):
+      for a in range(H_pad):
+        for b in range(W_pad):
+          for c in range(C):
+            # iterate over all the output values that x[n, c, a, b] has contributed to
+            for i in range(int(np.max([0, np.ceil((a - HH + 1)/S)])), int(np.min([H_out, np.floor(a/S)+1]))):
+              for j in range(int(np.max([0, np.ceil((b - WW + 1)/S)])), int(np.min([W_out, np.floor(b/S)+1]))):
+                for f in range(F):
+                  dx_pad[n, c, a, b] += dout[n, f, i, j] * w[f, c, a - S*i, b - S*j]
+
+    dx = dx_pad[:, :, pad:(dx_pad.shape[2] - pad), pad:(dx_pad.shape[3] - pad)]
+      
+    # compute db
+    for f in range(F):
+      db[f] = np.sum(dout[:, f, :, :])
+
+    #pass  
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -650,8 +730,27 @@ def max_pool_forward_naive(x, pool_param):
     # TODO: Implement the max-pooling forward pass                            #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    N, C, H, W = x.shape
+    
+    pH = pool_param['pool_height']
+    pW = pool_param['pool_width']
+    S  = pool_param['stride']
+    
+    # Check that pool params are compatible with input size
+    assert (H - pH) % S == 0
+    assert (W - pW) % S == 0
 
-    pass
+    # Compute output dimensions
+    H_out = int(1 + (H - pH) / S)
+    W_out = int(1 + (W - pW) / S)
+
+    out = np.zeros((N, C, H_out, W_out))
+
+    for i in range(H_out):
+      for j in range(W_out):
+        out[:,:,i, j] = np.max(np.max(x[:, :, S*i:(S*i + pH), S*j:(S*j + pW)], axis=3), axis=2)
+
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -678,7 +777,48 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # unpack
+    x, pool_param = cache
+    N, C, H, W = x.shape
+    N, C, H_out, W_out = dout.shape
+    pH = pool_param['pool_height']
+    pW = pool_param['pool_width']
+    S  = pool_param['stride']
+
+
+    # Max pool backward is pretty simple - just propagates backward the gradient
+    # to the argmax index and sets the rest to zero
+    # Because each element of X contributes to multiple POOL elements (if fields
+    # are overlapping), then dX_ij = sum(dout_{contains_X_ij})
+
+    dx = np.zeros(x.shape)
+
+    # iterate over each sample and depth for coding simplicity (inefficient)
+    for n in range(N):
+      for c in range(C):
+        # iterate over dout indices
+        for i in range(H_out):
+          for j in range(W_out):
+            x_slice = x[n, c, S*i:(S*i + pH), S*j:(S*j + pW)]
+            argmaxes = np.unravel_index(np.argmax(x_slice), shape=x_slice.shape)
+            mask = np.zeros((pH, pW))
+
+            mask[argmaxes] = 1
+
+
+            # add the dout value to the dx element corresponding
+            # to the max element of the x slice 
+            dx[n, c, S*i:(S*i + pH), S*j:(S*j + pW)] += dout[n, c, i, j] * mask
+
+    # for a in range(H):
+    #   for b in range(W):
+    #     # iterate over all the output values that x[n, c, a, b] has contributed to
+    #     for i in range(int(np.max([0, np.ceil((a - pH + 1)/S)])), int(np.min([H_out, np.floor(a/S)+1]))):
+    #       for j in range(int(np.max([0, np.ceil((b - pW + 1)/S)])), int(np.min([W_out, np.floor(b/S)+1]))):
+    #         x_slice = x[:, :, S*i:(S*i + pH), S*j:(S*j + pW)]
+    #         args_i = np.argmax(x_slice, axis=2)
+    #         args_j = np.argmax(x_slice, axis=3)
+    #         dx[:, :, a, b] += dout[:, :, i, j]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
