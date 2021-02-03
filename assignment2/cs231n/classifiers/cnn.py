@@ -62,8 +62,25 @@ class ThreeLayerConvNet(object):
         # the start of the loss() function to see how that happens.                #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        
+        # transform variables to match layers.py
+        C, H, W = input_dim
+        F = num_filters
+        WW = filter_size
+        HH = filter_size
+        
 
-        pass
+
+        #- w: Filter weights of shape (F, C, HH, WW)
+        # For the middle layer, affine_forward reshapes the input to a 
+        # matrix of shape (N, D), where D = F*H*W/4 (divide by 4 because
+        # this is after 2x2 pooling)
+        self.params['W1'] = np.random.randn(F, C, HH, WW) * weight_scale
+        self.params['b1'] = np.zeros(F)
+        self.params['W2'] = np.random.randn(int(F * (H / 2) * (W / 2)), hidden_dim) * weight_scale
+        self.params['b2'] = np.zeros(hidden_dim)
+        self.params['W3'] = np.random.randn(hidden_dim, num_classes) * weight_scale
+        self.params['b3'] = np.zeros(num_classes)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -101,8 +118,14 @@ class ThreeLayerConvNet(object):
         # cs231n/layer_utils.py in your implementation (already imported).         #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        #    conv - relu - 2x2 max pool - affine - relu - affine - softmax
 
-        pass
+        
+        out1, cache1 = conv_forward_im2col(X, W1, b1, conv_param)
+        out2, cache2 = relu_forward(out1)
+        out3, cache3 = max_pool_forward_fast(out2, pool_param)
+        out4, cache4 = affine_relu_forward(out3, W2, b2)
+        scores, cache5 = affine_forward(out4, W3, b3)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -125,7 +148,30 @@ class ThreeLayerConvNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        loss, dS = softmax_loss(scores, y)
+        loss += 0.5 * self.reg * (
+                    np.sum(self.params['W3'] * self.params['W3']) +
+                    np.sum(self.params['W2'] * self.params['W2']) +
+                    np.sum(self.params['W1'] * self.params['W1'])
+        )
+
+        # compute the backprop of the last affine step
+        # Then add the regularization loss
+        dout4, grads['W3'], grads['b3'] = affine_backward(dS, cache5)
+        grads['W3'] += self.reg * self.params['W3']
+        
+        # compute the backprop of the middle layer affine + reLU
+        dout3, grads['W2'], grads['b2'] = affine_relu_backward(dout4, cache4)
+        grads['W2'] += self.reg * self.params['W2']
+
+        # compute the backprop of the max pool layer
+        dout2 = max_pool_backward_fast(dout3, cache3)
+
+        # compute backprop of the first relu layer
+        dout1 = relu_backward(dout2, cache2)
+
+        # compute backprop of the conv layer
+        _, grads['W1'], grads['b1'] = conv_backward_im2col(dout1, cache1)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

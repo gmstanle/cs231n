@@ -860,7 +860,14 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # The vanilla batchnorm computes mean and var over axis=0. Therefore we need
+    # to reshape x to be of dimensions (N*H*W, C) so that the mean and var is 
+    # computed over each C
+    _, C, _, _ = x.shape
+    x_reshape = x.reshape(int(x.size / C), C)
+    out_vanilla, cache = batchnorm_forward(x_reshape, gamma, beta, bn_param)
+    if bn_param['mode'] == 'train': cache['x'] = x
+    out = out_vanilla.reshape(x.shape)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -894,7 +901,12 @@ def spatial_batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    _, C, _, _ = dout.shape
+    dout_reshape = dout.reshape(int(dout.size / C), C)
+    cache['x'] = cache['x'].reshape(int(cache['x'].size / C), C)
+    dx_vanilla, dgamma, dbeta = batchnorm_backward_alt(dout_reshape, cache)
+    dx = dx_vanilla.reshape(dout.shape)
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -909,7 +921,8 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     Computes the forward pass for spatial group normalization.
     In contrast to layer normalization, group normalization splits each entry 
     in the data into G contiguous pieces, which it then normalizes independently.
-    Per feature shifting and scaling are then applied to the data, in a manner identical to that of batch normalization and layer normalization.
+    Per feature shifting and scaling are then applied to the data, in a manner 
+    identical to that of batch normalization and layer normalization.
 
     Inputs:
     - x: Input data of shape (N, C, H, W)
@@ -934,7 +947,7 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
